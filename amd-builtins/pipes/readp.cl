@@ -1,0 +1,88 @@
+/*
+ * Copyright (c) 2014 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+//
+// Copyright (c) 2014 Advanced Micro Devices, Inc. All rights reserved.
+//
+
+#include "pipes.h"
+
+#define __READ_PIPE_INTERNAL_SIZE(SIZE, STYPE) \
+__attribute__((weak, always_inline)) int \
+__read_pipe_internal_##SIZE(__global struct pipeimp* p, STYPE* ptr) \
+{ \
+    size_t wi = atomic_load_explicit(&p->write_idx, memory_order_relaxed, memory_scope_device); \
+    size_t ri = reserve(&p->read_idx, wi, 1); \
+    if (ri == ~(size_t)0) \
+        return -1; \
+ \
+    *ptr = ((__global STYPE *)p->packets)[ri % p->end_idx]; \
+ \
+    if (ri == wi-1) { \
+        atomic_store_explicit(&p->write_idx, 0, memory_order_release, memory_scope_device); \
+        atomic_store_explicit(&p->read_idx, 0, memory_order_relaxed, memory_scope_device); \
+    }\
+\
+    return 0; \
+}
+
+DO_PIPE_INTERNAL_SIZE(__READ_PIPE_INTERNAL_SIZE)
+
+__attribute__((weak, always_inline)) int
+__read_pipe_internal_user( __global struct pipeimp* p, void* ptr, size_t size, size_t align)
+{
+    size_t wi = atomic_load_explicit(&p->write_idx, memory_order_relaxed, memory_scope_device);
+    size_t ri = reserve(&p->read_idx, wi, 1);
+    if (ri == ~(size_t)0)
+        return -1;
+
+    __memcpy_internal_aligned(ptr, p->packets + (ri % p->end_idx)*size, size, align);
+
+    if (ri == wi-1) {
+        atomic_store_explicit(&p->write_idx, 0, memory_order_release, memory_scope_device);
+        atomic_store_explicit(&p->read_idx, 0, memory_order_relaxed, memory_scope_device);
+    }
+
+    return 0;
+}
+
+#define __READ_PIPE_INDEXED_INTERNAL_SIZE(SIZE, STYPE) \
+__attribute__((weak, always_inline)) int \
+__read_pipe_reserved_internal_##SIZE(__global struct pipeimp* p, size_t rid, uint i, STYPE* ptr)  \
+{ \
+    rid += i; \
+    *ptr = ((__global STYPE *)p->packets)[rid % p->end_idx]; \
+ \
+    return 0; \
+}
+
+DO_PIPE_INTERNAL_SIZE(__READ_PIPE_INDEXED_INTERNAL_SIZE)
+
+__attribute__((weak, always_inline)) int
+__read_pipe_reserved_internal_user(__global struct pipeimp* p, size_t rid, uint i, void *ptr, size_t size, size_t align)
+{
+    rid += i;
+
+    __memcpy_internal_aligned(ptr, p->packets + (rid % p->end_idx)*size, size, align);
+
+    return 0;
+}
+

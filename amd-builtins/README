@@ -1,0 +1,9 @@
+This directory contains builtins from AMD's OpenCL builtin library.
+There is an ongoing effort to port these builtins to libclc.  If you
+would like to port a function, review the libclc-dev@pcc.me.uk archives
+to make sure no one is already working on it.  If no one else has started
+this port, then send an email to libclc-dev@pcc.me.uk with the subject
+
+Porting: builtin_name
+
+This way we don't have multiple people trying to port the same functions.
